@@ -1,0 +1,21 @@
+---
+# This file (which would be located at roles/prometheus_install/defaults/main.yml)
+# contains all the variables used by the role, providing defaults that can be 
+# overridden by the playbook or inventory.
+
+# Prometheus Version and Architecture
+prometheus_version: "2.51.1" 
+architecture: "amd64"
+
+# User and Group
+prometheus_user: "prometheus"
+prometheus_group: "prometheus"
+
+# Installation Paths
+install_dir: "/usr/local/bin"
+config_dir: "/etc/prometheus"
+data_dir: "/var/lib/prometheus"
+temp_dir: "/tmp/prometheus_install" 
+
+# Derived Variable
+archive_name: "prometheus-{{ prometheus_version }}.linux-{{ architecture }}"

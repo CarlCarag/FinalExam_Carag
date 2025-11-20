@@ -1,0 +1,132 @@
+---
+# This file (which would be located at roles/prometheus_install/tasks/main.yml)
+# contains the entire sequential logic for installing and configuring Prometheus.
+
+- name: Ensure necessary packages are installed
+  ansible.builtin.apt:
+    name: 
+      - wget
+      - tar
+    state: present
+    update_cache: yes
+
+- name: Create Prometheus group
+  ansible.builtin.group:
+    name: "{{ prometheus_group }}"
+    state: present
+
+- name: Create Prometheus user
+  ansible.builtin.user:
+    name: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    shell: "/bin/false"
+    create_home: no
+    state: present
+
+- name: Create required directories with correct permissions
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ config_dir }}", mode: '0750' }
+    - { path: "{{ data_dir }}", mode: '0750' }
+    - { path: "{{ temp_dir }}", mode: '0755' }
+
+- name: Download and unarchive Prometheus binary
+  ansible.builtin.unarchive:
+    src: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/{{ archive_name }}.tar.gz"
+    dest: "{{ temp_dir }}"
+    remote_src: yes
+    creates: "{{ temp_dir }}/{{ archive_name }}" 
+
+- name: Copy Prometheus binaries to install directory
+  ansible.builtin.copy:
+    src: "{{ temp_dir }}/{{ archive_name }}/{{ item }}"
+    dest: "{{ install_dir }}/{{ item }}"
+    owner: "root"
+    group: "root"
+    mode: '0755'
+    remote_src: yes
+  loop:
+    - prometheus
+    - promtool
+    
+- name: Copy console and console_libraries to config directory
+  ansible.builtin.copy:
+    src: "{{ temp_dir }}/{{ archive_name }}/{{ item }}/"
+    dest: "{{ config_dir }}/{{ item }}"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0755' 
+    remote_src: yes
+  loop:
+    - consoles
+    - console_libraries
+
+- name: Create Prometheus configuration file (prometheus.yml)
+  # NOTE: In a professional role, this would typically use the 'template' module (prometheus.yml.j2)
+  # instead of the 'copy' module with hardcoded 'content'.
+  ansible.builtin.copy:
+    content: |
+      global:
+        scrape_interval: 15s
+        evaluation_interval: 15s
+
+      scrape_configs:
+        - job_name: 'prometheus'
+          static_configs:
+            - targets: ['localhost:9090']
+    dest: "{{ config_dir }}/prometheus.yml"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: '0644'
+  notify: 
+    - Restart prometheus
+
+- name: Create systemd service file for Prometheus
+  # NOTE: This should also use the 'template' module for professional roles.
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Prometheus
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      User={{ prometheus_user }}
+      Group={{ prometheus_group }}
+      Type=simple
+      ExecStart={{ install_dir }}/prometheus \
+          --config.file={{ config_dir }}/prometheus.yml \
+          --storage.tsdb.path={{ data_dir }} \
+          --web.console.templates={{ config_dir }}/consoles \
+          --web.console.libraries={{ config_dir }}/console_libraries \
+          --web.listen-address=0.0.0.0:9090
+      
+      ProtectHome=true
+      ProtectSystem=full
+      PrivateTmp=true
+      
+      Restart=always
+      RestartSec=5s
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: "/etc/systemd/system/prometheus.service"
+    mode: '0644'
+  notify:
+    - Reload systemd
+
+- name: Clean up temporary installation files
+  ansible.builtin.file:
+    path: "{{ temp_dir }}"
+    state: absent
+
+- name: Ensure Prometheus service is started and enabled
+  ansible.builtin.service:
+    name: prometheus
+    state: started
+    enabled: yes
