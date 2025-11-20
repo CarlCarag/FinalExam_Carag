@@ -1,0 +1,14 @@
+---
+# This is the main playbook file. Its only job is to define the target hosts 
+# and apply the 'prometheus_install' role, which contains all the actual logic.
+
+- name: Apply Prometheus Installation Role to Target Hosts
+  # Using 'db_servers' as per your original request's hosts definition
+  hosts: db_servers
+  
+  # Ensure tasks run with root privileges
+  become: yes
+
+  # 1. Define the role to be executed
+  roles:
+    - role: prometheus_install
