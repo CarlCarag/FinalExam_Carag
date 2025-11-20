@@ -1,0 +1,22 @@
+---
+- name: Set Simple Static MOTD Message
+  hosts: db_servers
+  become: yes # Required to write to the /etc/motd file
+
+  # Define the variable that holds the username
+  vars:
+    manager_username: "Carl_Carag"
+
+  tasks:
+    - name: Overwrite /etc/motd with "Ansible Managed by <username>"
+      ansible.builtin.copy:
+        content: "Ansible Managed by {{ manager_username }}\n"
+        dest: /etc/motd
+        owner: root
+        group: root
+        mode: '0644'
+      # This task uses the 'copy' module to create the file and set its permissions.
+
+    - name: Report the applied change
+      ansible.builtin.debug:
+        msg: "MOTD successfully updated to: Ansible Managed by {{ manager_username }}"
